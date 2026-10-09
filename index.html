@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tarjeta STOP · Observación de Seguridad</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --red:#E31C23;
+    --red-dark:#A81118;
+    --ink:#1C1C1C;
+    --paper:#FAFAF9;
+    --card:#FFFFFF;
+    --line:#DEDBD2;
+    --safe:#1E7A46;
+    --safe-bg:#E9F5EE;
+    --unsafe-bg:#FDECEC;
+    --accent:#FFCC00;
+    --muted:#6B6862;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .display{font-family:"Arial Black",Impact,-apple-system,sans-serif;font-weight:900;
+    letter-spacing:.02em;text-transform:uppercase;}
+  .mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;}
+
+  .wrap{max-width:640px;margin:0 auto;padding-bottom:110px;}
+
+  /* ---- Status header (signature element) ---- */
+  .statusbar{position:sticky;top:0;z-index:20;background:var(--ink);color:#fff;
+    padding:10px 14px;display:flex;align-items:center;gap:10px;}
+  .octagon{flex:0 0 auto;width:44px;height:44px;position:relative;}
+  .octagon svg{width:100%;height:100%;display:block;transition:fill .3s ease;}
+  .status-text{flex:1;min-width:0;}
+  .status-text .label{font-size:10px;letter-spacing:.12em;color:#B9B6AE;text-transform:uppercase;}
+  .status-text .value{font-size:14px;line-height:1.2;font-weight:700;transition:color .3s ease;}
+  .status-count{flex:0 0 auto;text-align:right;}
+  .status-count .n{font-size:22px;font-weight:800;line-height:1;transition:color .3s ease;}
+  .status-count .lbl{font-size:9px;color:#B9B6AE;text-transform:uppercase;letter-spacing:.08em;}
+
+  /* ---- Header ---- */
+  .hero{padding:22px 16px 14px;text-align:center;}
+  .hero h1{margin:0;font-size:20px;letter-spacing:.03em;}
+  .hero p{margin:4px 0 0;color:var(--muted);font-size:13px;}
+  .hero .code{margin-top:6px;font-size:11px;color:var(--muted);}
+
+  /* ---- Meta fields ---- */
+  .meta{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    margin:0 14px 16px;padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .meta .full{grid-column:1/-1;}
+  .field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);margin-bottom:4px;}
+  .field input,.field select,.field textarea{width:100%;border:1px solid var(--line);
+    border-radius:7px;padding:9px 10px;font-size:16px;background:#fff;color:var(--ink);
+    font-family:inherit;}
+  .field textarea{resize:vertical;min-height:56px;}
+  .field input[type="text"],.field input:not([type]),.field textarea,
+  .other-row input,.ruled{text-transform:uppercase;}
+
+  /* ---- Sections ---- */
+  .section{margin:0 14px 16px;border:1px solid var(--line);border-radius:10px;
+    overflow:hidden;background:var(--card);}
+  .sec-head{background:var(--red);color:#fff;display:flex;align-items:center;
+    justify-content:space-between;padding:11px 14px;gap:10px;}
+  .sec-head .title{font-size:13.5px;font-weight:700;letter-spacing:.02em;}
+  .sec-toggle{flex:0 0 auto;display:flex;align-items:center;gap:6px;cursor:pointer;
+    user-select:none;}
+  .sec-toggle span{font-size:9.5px;text-align:right;line-height:1.2;max-width:56px;
+    text-transform:uppercase;letter-spacing:.03em;}
+  .box{width:22px;height:22px;border:2px solid currentColor;border-radius:4px;
+    flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:#fff;}
+  .sec-toggle .box{color:#fff;background:rgba(255,255,255,.12);}
+  .sec-toggle.on .box{background:#fff;color:var(--safe);}
+  .box svg{width:14px;height:14px;opacity:0;transition:opacity .15s;}
+  .box.checked svg{opacity:1;}
+
+  .items{padding:4px 0;}
+  .item{display:flex;align-items:flex-start;gap:11px;padding:10px 14px;
+    border-top:1px solid var(--line);cursor:pointer;user-select:none;}
+  .item:first-child{border-top:none;}
+  .item .box{width:20px;height:20px;color:var(--red);margin-top:1px;}
+  .item.checked .box{background:var(--unsafe-bg);}
+  .item .box svg{color:var(--red);}
+  .item-text{flex:1;font-size:14px;line-height:1.35;}
+  .c1{display:inline-block;margin-left:6px;font-size:9px;font-weight:700;color:var(--red-dark);
+    background:#FCE3E2;border-radius:3px;padding:1px 5px;letter-spacing:.03em;vertical-align:middle;}
+  .item.checked{background:var(--unsafe-bg);}
+
+  .other-row{padding:8px 14px 12px;border-top:1px solid var(--line);}
+  .other-row input{width:100%;border:1px solid var(--line);border-radius:7px;
+    padding:8px 10px;font-size:16px;font-family:inherit;}
+  .other-row label{display:block;font-size:10px;text-transform:uppercase;color:var(--muted);
+    letter-spacing:.05em;margin-bottom:4px;}
+
+  /* ---- Comments / actions ---- */
+  .notes{margin:0 14px 16px;}
+  .notes h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+    margin:0 0 8px;}
+
+  /* ---- Footer bar ---- */
+  .footerbar{position:fixed;bottom:0;left:0;right:0;background:var(--card);
+    border-top:1px solid var(--line);padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    display:flex;gap:8px;z-index:30;}
+  .btn{flex:1;border:none;border-radius:9px;padding:13px 10px;font-size:13.5px;font-weight:700;
+    letter-spacing:.02em;cursor:pointer;text-align:center;}
+  .btn-primary{background:var(--ink);color:#fff;}
+  .btn-primary:active{background:#000;}
+  .btn-ghost{background:#F0EEE8;color:var(--ink);flex:0 0 auto;padding:13px 16px;}
+  .pending-dot{display:inline-block;min-width:16px;height:16px;padding:0 4px;border-radius:8px;
+    background:var(--accent);color:var(--ink);font-size:10px;font-weight:800;line-height:16px;
+    text-align:center;margin-left:6px;}
+
+  .toast{position:fixed;left:50%;bottom:78px;transform:translateX(-50%) translateY(10px);
+    background:var(--ink);color:#fff;padding:10px 16px;border-radius:20px;font-size:13px;
+    opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;z-index:40;
+    max-width:86%;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* ---- Página 2: Reporte de Observación ---- */
+  .page2{display:none;}
+  .page2.active{display:block;}
+  .page1.hidden{display:none;}
+  .p2-hero{display:flex;align-items:center;gap:14px;padding:22px 16px 6px;}
+  .p2-hero .oct-mini{flex:0 0 auto;width:56px;height:56px;}
+  .p2-hero .oct-mini svg{width:100%;height:100%;display:block;}
+  .p2-hero h1{margin:0;font-size:19px;letter-spacing:.02em;}
+  .p2-block{margin:14px 14px 20px;}
+  .p2-block .bullets{border-bottom:2.5px solid var(--ink);padding-bottom:10px;margin-bottom:0;}
+  .p2-block.red .bullets{border-bottom-color:var(--ink);}
+  .p2-block .bullets p{margin:0 0 3px;font-size:12.5px;font-weight:700;line-height:1.35;}
+  .p2-block.red .bullets p{color:var(--red);}
+  .p2-block.black .bullets p{color:var(--ink);}
+  .ruled{width:100%;border:none;border-top:1px solid transparent;background:
+      repeating-linear-gradient(to bottom, transparent, transparent 30px, var(--line) 30px, var(--line) 32px);
+    background-position: 0 2px; line-height:32px; font-size:16px; font-family:inherit;
+    color:var(--ink); resize:none; padding:2px 2px 0; display:block;}
+  .ruled:focus{outline:none;}
+
+  .status-count + .status-count{border-left:1px solid #3F3F3F;padding-left:10px;}
+  .status-count .lbl{white-space:nowrap;}
+  @media (max-width:340px){.status-count .lbl{font-size:8px;letter-spacing:.03em;}.status-count + .status-count{padding-left:8px;}#corrN{font-size:16px;}}
+  #corrN{font-size:18px;font-weight:800;letter-spacing:.02em;color:#fff;}
+  #corrBox.pend #corrN{font-size:13px;color:var(--accent);}
+
+  /* ---- Validación y foco ---- */
+  .field.invalid label{color:var(--red);font-weight:700;}
+  .field.invalid input,.field.invalid select{border-color:var(--red);background:#FFF6F6;}
+  .section.invalid{border-color:var(--red);box-shadow:0 0 0 2px #FCE3E2;}
+  .item:focus-visible,.sec-toggle:focus-visible{outline:3px solid var(--accent);outline-offset:-3px;}
+  .btn:disabled{opacity:.6;}
+
+  @media print{
+    .statusbar,.footerbar{display:none;}
+    body{background:#fff;}
+    .section{break-inside:avoid;border-color:#999;}
+    .page1.hidden{display:block;}
+    .page2{display:block !important;}
+  }
+
+  /* ---- Modo captura para generar PDF (oculta chrome, fuerza ambas páginas) ---- */
+  /* (ya no se usa: el PDF ahora se genera desde una plantilla propia, ver JS) */
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="statusbar">
+    <div class="octagon" id="octagon">
+      <svg viewBox="0 0 100 100"><polygon id="octPoly" points="30,4 70,4 96,30 96,70 70,96 30,96 4,70 4,30" fill="#E31C23"/>
+        <text x="50" y="46" text-anchor="middle" font-family="Arial Black, sans-serif" font-weight="900" font-size="20" fill="#fff">STOP</text>
+        <text x="50" y="66" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#fff">por seguridad</text>
+      </svg>
+    </div>
+    <div class="status-text">
+      <div class="label">Estado</div>
+      <div class="value" id="statusValue">Sin iniciar</div>
+    </div>
+    <div class="status-count">
+      <div class="n" id="statusN">0</div>
+      <div class="lbl">actos inseguros</div>
+    </div>
+    <div class="status-count" id="corrBox">
+      <div class="n mono" id="corrN">—</div>
+      <div class="lbl">N° tarjeta</div>
+    </div>
+  </div>
+
+  <div class="hero">
+    <h1 class="display">Tarjeta STOP</h1>
+    <p>Ciclo de observación de la seguridad — Decida · Deténgase · Observe · Actúe · Reporte</p>
+    <div class="code mono" id="formCode"></div>
+  </div>
+
+  <div class="page1" id="page1">
+
+  <div class="meta">
+    <div class="field"><label>Observador</label><input id="mObservador" placeholder="Nombre completo"></div>
+    <div class="field"><label>Turno</label>
+      <select id="mTurno">
+        <option value="">Seleccionar</option>
+        <option>Mañana (06–14h)</option>
+        <option>Tarde (14–22h)</option>
+        <option>Noche (22–06h)</option>
+      </select>
+    </div>
+    <div class="field"><label>Área / Zona observada</label>
+      <select id="mArea">
+        <option value="">Seleccionar</option>
+        <option>Despacho a cliente A</option>
+        <option>Despacho a cliente B</option>
+        <option>Despacho a Regiones</option>
+        <option>Losa de consolidación</option>
+        <option>PTW</option>
+        <option>MZ</option>
+        <option>Aduana</option>
+        <option>Zona embalaje técnico</option>
+        <option>Reposición</option>
+        <option>Zona de Residuos</option>
+        <option>Recepción</option>
+        <option>ZDA</option>
+        <option>Despacho a Tienda</option>
+        <option>Control de acceso</option>
+        <option>Logística inversa</option>
+        <option>ZDR</option>
+        <option>Oficinas</option>
+        <option>Camarines</option>
+        <option>Baños</option>
+        <option>Sala de Baterías</option>
+        <option>Tablero eléctrico</option>
+        <option>Perímetro exterior</option>
+      </select>
+    </div>
+    <div class="field"><label>Pasillo</label>
+      <select id="mPasillo">
+        <option>No aplica</option>
+        <option>101</option>
+        <option>102</option>
+        <option>103</option>
+        <option>104</option>
+        <option>105</option>
+        <option>106</option>
+        <option>107</option>
+        <option>108</option>
+        <option>109</option>
+        <option>110</option>
+        <option>111</option>
+        <option>112</option>
+        <option>113</option>
+        <option>114</option>
+        <option>115</option>
+        <option>116</option>
+        <option>124</option>
+        <option>125</option>
+        <option>126</option>
+        <option>127</option>
+        <option>128</option>
+        <option>129</option>
+        <option>130</option>
+        <option>131</option>
+        <option>132</option>
+      </select>
+    </div>
+    <div class="field"><label>Persona(s) observada(s)</label><input id="mPersona" placeholder="Nombre u operación"></div>
+    <div class="field"><label>Fecha y hora</label><input id="mFecha" readonly class="mono"></div>
+    <div class="field full"><label>Área del observado</label>
+      <select id="mAreaObservado">
+        <option value="">Seleccionar</option>
+        <option>Inbound Recepción</option>
+        <option>Inbound Preparación</option>
+        <option>Outbound Preparación</option>
+        <option>Outbound Despacho</option>
+        <option>Tienda</option>
+        <option>Análisis</option>
+        <option>Mantenimiento</option>
+        <option>Calidad</option>
+        <option>Security</option>
+        <option>Limpieza</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="sections"></div>
+
+  <div class="notes">
+    <h2>Acción tomada / comentarios</h2>
+    <div class="field"><textarea id="mComentarios" placeholder="Describa lo conversado, el acuerdo tomado o la acción correctiva..."></textarea></div>
+  </div>
+
+  </div><!-- /page1 -->
+
+  <div class="page2" id="page2">
+    <div class="p2-hero">
+      <div class="oct-mini">
+        <svg viewBox="0 0 100 100"><polygon points="30,4 70,4 96,30 96,70 70,96 30,96 4,70 4,30" fill="#E31C23"/>
+          <text x="50" y="46" text-anchor="middle" font-family="Arial Black, sans-serif" font-weight="900" font-size="20" fill="#fff">STOP</text>
+        </svg>
+      </div>
+      <h1 class="display">Reporte de Observación</h1>
+      <div style="margin-left:auto;text-align:right;"><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">N° tarjeta</div><div class="mono" id="corrN2" style="font-size:18px;font-weight:800;">—</div></div>
+    </div>
+
+    <div class="p2-block red">
+      <div class="bullets">
+        <p>• Actos seguros.</p>
+        <p>• Acciones llevadas a cabo para fomentar un desempeño seguro continuo.</p>
+      </div>
+      <textarea class="ruled" id="p2ActosSeguros" rows="12" placeholder=""></textarea>
+    </div>
+
+    <div class="p2-block black">
+      <div class="bullets">
+        <p>• Actos inseguros observados.</p>
+        <p>• Acción correctiva inmediata.</p>
+        <p>• Acción para prevenir la repetición.</p>
+      </div>
+      <textarea class="ruled" id="p2ActosInseguros" rows="12" placeholder=""></textarea>
+    </div>
+  </div><!-- /page2 -->
+
+</div>
+
+<div class="footerbar" id="footerPage1">
+  <button class="btn btn-ghost" id="btnPdf">Imprimir / PDF</button>
+  <button class="btn btn-primary" id="btnSiguiente">Siguiente →</button>
+</div>
+
+<div class="footerbar" id="footerPage2" style="display:none;">
+  <button class="btn btn-ghost" id="btnAtras">← Atrás</button>
+  <button class="btn btn-primary" id="btnGuardar">Guardar tarjeta</button>
+  <button class="btn btn-ghost" id="btnSync">Sync<span class="pending-dot" id="pendingDot" style="display:none">0</span></button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ CONFIG ============ */
+// Reemplaza por la URL de tu Web App de Apps Script (Implementar > Nueva implementación > Aplicación web)
+const GAS_URL = "https://script.google.com/macros/s/AKfycbz5QzBZZag70A3zKmjI0uHTt1tksyVZUg3ZqAy2YUQ49kw5yLfVFk54SVfg7E65-bAxIw/exec";
+const STORAGE_KEY = "stop_cards_queue_v1";
+const FORM_CODE = "SI-006/Rev.2";
+
+/* ============ DATA: 5 secciones tal cual la tarjeta física ============ */
+const SECTIONS = [
+  {
+    id: "reacciones",
+    title: "Reacciones de las Personas",
+    items: [
+      "Ajustan o agregan algo a su equipo de protección personal",
+      "Cambian de posición súbitamente",
+      "Reacomodan su trabajo",
+      "Dejan de trabajar o se alejan del lugar"
+    ],
+    otherLabel: "Otra reacción observada"
+  },
+  {
+    id: "epp",
+    title: "Equipo de Protección Personal",
+    items: ["Cabeza","Ojos y cara","Oídos","Aparato respiratorio","Brazos y manos","Tronco","Piernas y pies"]
+  },
+  {
+    id: "posiciones",
+    title: "Posiciones de las Personas",
+    note: "C1 · Completar únicamente en casos de actos inseguros",
+    items: [
+      "Golpear contra objetos",
+      "Ser golpeado por objetos",
+      "Quedar atrapado sobre, entre o dentro de objetos",
+      "Caídas",
+      "Contacto con temperaturas extremas",
+      "Contacto con corriente eléctrica",
+      {t:"Inhalación de una sustancia peligrosa", c1:true},
+      {t:"Absorción de una sustancia peligrosa", c1:true},
+      {t:"Ingestión de una sustancia peligrosa", c1:true},
+      "Sobre-esfuerzo",
+      "Movimientos repetitivos",
+      "Posiciones incómodas y posturas estáticas"
+    ]
+  },
+  {
+    id: "herramientas",
+    title: "Herramientas y Equipo",
+    items: [
+      "Empleo de herramientas y equipo inadecuados para el trabajo",
+      "Empleo en forma incorrecta de herramientas y equipo",
+      "Empleo de herramientas y equipo que estén en condiciones inseguras"
+    ]
+  },
+  {
+    id: "procedimientos",
+    title: "Procedimientos, Orden y Limpieza",
+    items: [
+      "Procedimientos inadecuados",
+      "Procedimientos no son conocidos ni entendidos",
+      "Procedimientos no se cumplen",
+      "Estándares de orden y limpieza inadecuados",
+      "Estándares de orden y limpieza no son conocidos ni entendidos",
+      "Estándares de orden y limpieza no se cumple"
+    ]
+  }
+];
+
+const checkSvg = `<svg viewBox="0 0 24 24" fill="none"><path d="M4 12l5 5L20 6" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+/* ============ Estado ============ */
+let state = { sections:{} };
+SECTIONS.forEach(s=>{
+  state.sections[s.id] = { safe:false, items: s.items.map(_=>false), other:"" };
+});
+
+/* ============ Render ============ */
+const root = document.getElementById("sections");
+SECTIONS.forEach(sec=>{
+  const el = document.createElement("div");
+  el.className = "section";
+  el.dataset.section = sec.id;
+  const hasOther = !!sec.otherLabel;
+  el.innerHTML = `
+    <div class="sec-head">
+      <div class="title">${sec.title}${sec.note ? `<div style="font-weight:400;font-size:10px;opacity:.85;margin-top:2px;">${sec.note}</div>`:""}</div>
+      <div class="sec-toggle" role="checkbox" tabindex="0" aria-checked="false" aria-label="Marcar todo seguro: ${sec.title}" data-sec="${sec.id}">
+        <span>Marque si<br>todo está seguro</span>
+        <div class="box"><span style="display:contents">${checkSvg}</span></div>
+      </div>
+    </div>
+    <div class="items">
+      ${sec.items.map((it,i)=>{
+        const isObj = typeof it === "object";
+        const text = isObj ? it.t : it;
+        const c1 = isObj && it.c1;
+        return `<div class="item" role="checkbox" tabindex="0" aria-checked="false" data-sec="${sec.id}" data-i="${i}">
+          <div class="box">${checkSvg}</div>
+          <div class="item-text">${text}${c1?'<span class="c1">C1</span>':''}</div>
+        </div>`;
+      }).join("")}
+    </div>
+    ${hasOther ? `<div class="other-row">
+      <label>${sec.otherLabel}</label>
+      <input type="text" data-other="${sec.id}" placeholder="Especifique si aplica...">
+    </div>` : ""}
+  `;
+  root.appendChild(el);
+});
+
+/* ============ Interacción ============ */
+function setFechaNow(){
+  const d = new Date();
+  const pad = n => String(n).padStart(2,"0");
+  document.getElementById("mFecha").value =
+    `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+setFechaNow();
+document.getElementById("formCode").textContent = FORM_CODE + " · Digital";
+
+/* ============ Forzar mayúsculas en todo lo que se escribe ============ */
+function enforceUppercase_(el){
+  el.addEventListener("input", ()=>{
+    const start = el.selectionStart, end = el.selectionEnd;
+    el.value = el.value.toUpperCase();
+    if(start !== null && end !== null && el.setSelectionRange){
+      el.setSelectionRange(start, end);
+    }
+  });
+}
+document.querySelectorAll(
+  "#mObservador, #mPersona, #mComentarios, #p2ActosSeguros, #p2ActosInseguros, [data-other]"
+).forEach(enforceUppercase_);
+
+function setItem_(row, val){
+  const sec = row.dataset.sec, i = +row.dataset.i;
+  state.sections[sec].items[i] = val;
+  row.classList.toggle("checked", val);
+  row.querySelector(".box").classList.toggle("checked", val);
+  row.setAttribute("aria-checked", String(val));
+}
+function setSafe_(sec, val){
+  state.sections[sec].safe = val;
+  const t = document.querySelector(`.sec-toggle[data-sec="${sec}"]`);
+  t.classList.toggle("on", val);
+  t.querySelector(".box").classList.toggle("checked", val);
+  t.setAttribute("aria-checked", String(val));
+}
+function clearInvalid_(sec){
+  const s = document.querySelector(`.section[data-section="${sec}"]`);
+  if(s) s.classList.remove("invalid");
+}
+function onItemToggle_(row){
+  const sec = row.dataset.sec, i = +row.dataset.i;
+  setItem_(row, !state.sections[sec].items[i]);
+  // marcar un ítem inseguro desmarca "todo seguro" de la sección
+  if(state.sections[sec].items[i] && state.sections[sec].safe) setSafe_(sec, false);
+  clearInvalid_(sec);
+  updateStatus();
+}
+function onSafeToggle_(t){
+  const sec = t.dataset.sec;
+  const val = !state.sections[sec].safe;
+  setSafe_(sec, val);
+  // marcar "todo seguro" limpia los ítems inseguros de esa sección
+  if(val) document.querySelectorAll(`.item[data-sec="${sec}"]`).forEach(row=> setItem_(row, false));
+  clearInvalid_(sec);
+  updateStatus();
+}
+function bindToggle_(el, fn){
+  el.addEventListener("click", ()=> fn(el));
+  el.addEventListener("keydown", e=>{
+    if(e.key === " " || e.key === "Enter"){ e.preventDefault(); fn(el); }
+  });
+}
+document.querySelectorAll(".item").forEach(row=> bindToggle_(row, onItemToggle_));
+document.querySelectorAll(".sec-toggle").forEach(t=> bindToggle_(t, onSafeToggle_));
+
+document.querySelectorAll("[data-other]").forEach(inp=>{
+  inp.addEventListener("input", ()=>{ state.sections[inp.dataset.other].other = inp.value; });
+});
+
+function totalUnsafe(){
+  return Object.values(state.sections).reduce((sum,s)=> sum + s.items.filter(Boolean).length, 0);
+}
+
+function sectionAnswered_(id){
+  const st = state.sections[id];
+  return st.safe || st.items.some(Boolean);
+}
+
+function updateStatus(){
+  const n = totalUnsafe();
+  const answered = SECTIONS.filter(sec => sectionAnswered_(sec.id)).length;
+  const oct = document.getElementById("octPoly");
+  const val = document.getElementById("statusValue");
+  document.getElementById("statusN").textContent = n;
+  if(answered === 0){
+    oct.setAttribute("fill", "#6B6862");
+    val.textContent = "Sin iniciar";
+    val.style.color = "#B9B6AE";
+  } else if(n > 0){
+    oct.setAttribute("fill", "#E31C23");
+    val.textContent = "Actos detectados";
+    val.style.color = "#FFB3B0";
+  } else if(answered < SECTIONS.length){
+    oct.setAttribute("fill", "#B58B00");
+    val.textContent = `En curso ${answered}/${SECTIONS.length}`;
+    val.style.color = "#FFE08A";
+  } else {
+    oct.setAttribute("fill", "#1E7A46");
+    val.textContent = "Todo bajo control";
+    val.style.color = "#8FD6AE";
+  }
+}
+updateStatus();
+
+/* ============ Guardar / cola / sync ============ */
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(()=>t.classList.remove("show"), 2600);
+}
+
+function getQueue(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }catch(e){ return []; } }
+function setQueue(q){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(q)); }
+  catch(e){
+    console.error("No se pudo escribir la cola:", e);
+    showToast("No hay espacio para guardar la tarjeta en este dispositivo");
+    return false;
+  }
+  refreshPendingDot();
+  return true;
+}
+function refreshPendingDot(){
+  const n = getQueue().length;
+  const dot = document.getElementById("pendingDot");
+  if(n > 0){ dot.style.display = "inline-block"; dot.textContent = n; }
+  else { dot.style.display = "none"; }
+}
+refreshPendingDot();
+
+/* ============ Correlativo (único y global, lo entrega Google) ============ */
+const CORR_KEY = "stop_correlativo_actual";
+let correlativo = null, corrBusy_ = false;
+
+function fmtCorr_(n){ return (n === null || n === undefined || n === "") ? "—" : String(n).padStart(4, "0"); }
+
+function renderCorr_(){
+  const txt = correlativo == null ? "Pend." : fmtCorr_(correlativo);
+  ["corrN","corrN2"].forEach(id=>{ const el = document.getElementById(id); if(el) el.textContent = txt; });
+  const box = document.getElementById("corrBox");
+  if(box) box.classList.toggle("pend", correlativo == null);
+}
+
+/* Pide un número nuevo al script. Devuelve el entero o null si no hay conexión/respuesta. */
+async function fetchCorrelativo_(){
+  if(GAS_URL.includes("PEGA_AQUI") || !navigator.onLine) return null;
+  const ctl = new AbortController();
+  const t = setTimeout(()=> ctl.abort(), 7000);
+  try{
+    const res = await fetch(GAS_URL + "?accion=siguiente", {signal: ctl.signal});
+    const d = await res.json();
+    return (d && d.ok === true && Number.isInteger(d.correlativo)) ? d.correlativo : null;
+  }catch(e){ return null; }
+  finally{ clearTimeout(t); }
+}
+
+/* Deja un número reservado para la tarjeta en curso. Si recargas la página reutiliza el mismo. */
+async function initCorrelativo_(){
+  if(corrBusy_ || correlativo != null) return;
+  corrBusy_ = true;
+  try{
+    let n = null;
+    try{ const v = localStorage.getItem(CORR_KEY); if(v) n = parseInt(v, 10); }catch(e){}
+    if(!Number.isInteger(n)){
+      n = await fetchCorrelativo_();
+      if(n !== null){ try{ localStorage.setItem(CORR_KEY, String(n)); }catch(e){} }
+    }
+    correlativo = Number.isInteger(n) ? n : null;
+  } finally {
+    corrBusy_ = false;
+    renderCorr_();
+  }
+}
+
+function buildPayload(){
+  const bySec = {};
+  SECTIONS.forEach(sec=>{
+    const st = state.sections[sec.id];
+    bySec[sec.id] = {
+      titulo: sec.title,
+      todoSeguro: st.safe,
+      itemsMarcados: sec.items.filter((_,i)=> st.items[i]).map(it => typeof it==="object" ? it.t : it),
+      otro: st.other || ""
+    };
+  });
+  return {
+    id: "STOP-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+    formulario: FORM_CODE,
+    correlativo: correlativo,
+    observador: document.getElementById("mObservador").value,
+    turno: document.getElementById("mTurno").value,
+    area: document.getElementById("mArea").value,
+    pasillo: document.getElementById("mPasillo").value,
+    areaObservado: document.getElementById("mAreaObservado").value,
+    personaObservada: document.getElementById("mPersona").value,
+    fecha: document.getElementById("mFecha").value,
+    comentarios: document.getElementById("mComentarios").value,
+    actosSegurosReporte: document.getElementById("p2ActosSeguros").value,
+    actosInsegurosReporte: document.getElementById("p2ActosInseguros").value,
+    totalActosInseguros: totalUnsafe(),
+    secciones: bySec
+  };
+}
+
+function loadScript_(src){
+  return new Promise((resolve, reject)=>{
+    const sc = document.createElement("script");
+    sc.src = src; sc.onload = resolve;
+    sc.onerror = ()=> reject(new Error("No se pudo cargar " + src));
+    document.head.appendChild(sc);
+  });
+}
+async function ensureLibs_(){
+  if(!window.html2canvas) await loadScript_("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+  if(!window.jspdf) await loadScript_("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+}
+
+/* Devuelve {ok, error, sinPdf}. Solo es ok si el servidor responde {"ok":true}.
+   El PDF se genera aquí, al enviar, y NO se guarda en la cola (la cola solo guarda datos livianos). */
+async function trySend(payload){
+  if(GAS_URL.includes("PEGA_AQUI")) return {ok:false, error:"Falta configurar GAS_URL"};
+  if(payload.correlativo == null){
+    const n = await fetchCorrelativo_();
+    if(n === null) return {ok:false, error:"No se pudo obtener el N° de tarjeta"};
+    payload.correlativo = n;
+    const q = getQueue(), it = q.find(x => x.id === payload.id);   // se guarda ya: un reintento no pide otro
+    if(it){ it.correlativo = n; setQueue(q); }
+  }
+  const body = Object.assign({}, payload);
+  try{
+    await ensureLibs_();
+    body.pdfBase64 = await generatePdfBase64(payload);
+  }catch(e){
+    console.error("PDF no generado:", e);
+    const h = document.getElementById("pdfHolder"); if(h) h.remove();
+    body.sinPdf = true;   // los datos son lo prioritario: se envían igual
+  }
+  try{
+    const res = await fetch(GAS_URL, {
+      method: "POST",
+      headers: {"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if(data && data.ok === true) return {ok:true, sinPdf: !!body.sinPdf};
+    return {ok:false, error:(data && data.error) || "El servidor no confirmó la recepción"};
+  }catch(e){
+    return {ok:false, error:"Sin conexión o sin respuesta del servidor"};
+  }
+}
+
+/* ============ Plantillas limpias para el PDF (sin inputs/selects, solo texto) ============ */
+/* Reconstruye el estado de una sección a partir del payload guardado,
+   para poder regenerar el PDF aunque el formulario ya se haya reiniciado. */
+function sectionState_(payload, sec){
+  const d = (payload.secciones && payload.secciones[sec.id]) || {todoSeguro:false, itemsMarcados:[], otro:""};
+  return {
+    safe: d.todoSeguro,
+    items: sec.items.map(it => d.itemsMarcados.includes(typeof it === "object" ? it.t : it)),
+    other: d.otro || ""
+  };
+}
+
+function pdfPage1Html(payload){
+  const sectionsHtml = SECTIONS.map(sec=>{
+    const st = sectionState_(payload, sec);
+    const itemsHtml = sec.items.map((it,i)=>{
+      const isObj = typeof it === "object";
+      const text = isObj ? it.t : it;
+      const c1 = isObj && it.c1;
+      const checked = st.items[i];
+      return `<div style="display:flex;gap:7px;align-items:flex-start;padding:3.5px 12px;border-top:1px solid #DEDBD2;${checked?'background:#FDECEC;':''}">
+        <div style="width:13px;height:13px;border:2px solid ${checked?'#E31C23':'#999999'};border-radius:3px;flex:0 0 auto;margin-top:1px;background:${checked?'#E31C23':'#ffffff'};"></div>
+        <div style="flex:1;font-size:10.5px;line-height:1.28;color:#1C1C1C;">${text}${c1?'<span style="margin-left:5px;font-size:8px;font-weight:700;color:#A81118;background:#FCE3E2;border-radius:3px;padding:1px 4px;">C1</span>':''}</div>
+      </div>`;
+    }).join("");
+    const otherHtml = sec.otherLabel
+      ? `<div style="padding:5px 12px 7px;border-top:1px solid #DEDBD2;font-size:10px;color:#333;"><b>${sec.otherLabel}:</b> ${esc_(st.other) || '—'}</div>`
+      : "";
+    return `<div style="border:1px solid #DEDBD2;border-radius:7px;overflow:hidden;margin-bottom:7px;break-inside:avoid;">
+      <div style="background:#E31C23;color:#ffffff;display:flex;justify-content:space-between;align-items:center;padding:6px 12px;">
+        <div style="font-size:11px;font-weight:700;">${sec.title}</div>
+        <div style="font-size:9px;font-weight:700;background:${st.safe?'#ffffff':'rgba(255,255,255,.18)'};color:${st.safe?'#1E7A46':'#ffffff'};padding:2px 8px;border-radius:10px;white-space:nowrap;">${st.safe?'TODO SEGURO':'—'}</div>
+      </div>
+      <div>${itemsHtml}</div>
+      ${otherHtml}
+    </div>`;
+  }).join("");
+
+  return `<div style="width:780px;background:#ffffff;padding:26px 34px;box-sizing:border-box;
+      font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1C1C1C;">
+    <div style="display:flex;align-items:center;gap:14px;border-bottom:3px solid #1C1C1C;padding-bottom:12px;margin-bottom:14px;">
+      <svg width="44" height="44" viewBox="0 0 100 100">
+        <polygon points="30,4 70,4 96,30 96,70 70,96 30,96 4,70 4,30" fill="#E31C23"/>
+        <text x="50" y="46" text-anchor="middle" font-family="Arial Black, sans-serif" font-weight="900" font-size="20" fill="#ffffff">STOP</text>
+        <text x="50" y="66" text-anchor="middle" font-family="Arial" font-size="9" fill="#ffffff">por seguridad</text>
+      </svg>
+      <div>
+        <div style="font-size:18px;font-weight:900;letter-spacing:.02em;text-transform:uppercase;">Tarjeta STOP</div>
+        <div style="font-size:10px;color:#6B6862;">Ciclo de observación de la seguridad · ${FORM_CODE}</div>
+      </div>
+      <div style="margin-left:auto;text-align:right;"><div style="font-size:9px;color:#6B6862;text-transform:uppercase;letter-spacing:.06em;">N° tarjeta</div><div style="font-size:22px;font-weight:900;">${fmtCorr_(payload.correlativo)}</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin-bottom:14px;font-size:11px;">
+      <div><b>Observador:</b> ${esc_(payload.observador) || '—'}</div>
+      <div><b>Turno:</b> ${esc_(payload.turno) || '—'}</div>
+      <div><b>Área / Zona:</b> ${esc_(payload.area) || '—'}</div>
+      <div><b>Pasillo:</b> ${esc_(payload.pasillo) || '—'}</div>
+      <div><b>Área del observado:</b> ${esc_(payload.areaObservado) || '—'}</div>
+      <div><b>Persona(s) observada(s):</b> ${esc_(payload.personaObservada) || '—'}</div>
+      <div><b>Fecha y hora:</b> ${esc_(payload.fecha) || '—'}</div>
+    </div>
+
+    ${sectionsHtml}
+
+    <div style="margin-top:4px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#6B6862;margin-bottom:5px;">Acción tomada / comentarios</div>
+      <div style="border:1px solid #DEDBD2;border-radius:8px;padding:8px 10px;font-size:11px;min-height:40px;white-space:pre-wrap;">${esc_(payload.comentarios) || '—'}</div>
+    </div>
+  </div>`;
+}
+
+function pdfPage2Html(payload){
+  return `<div style="width:780px;background:#ffffff;padding:36px 40px;box-sizing:border-box;
+      font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1C1C1C;">
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:22px;">
+      <svg width="52" height="52" viewBox="0 0 100 100">
+        <polygon points="30,4 70,4 96,30 96,70 70,96 30,96 4,70 4,30" fill="#E31C23"/>
+        <text x="50" y="46" text-anchor="middle" font-family="Arial Black, sans-serif" font-weight="900" font-size="20" fill="#ffffff">STOP</text>
+      </svg>
+      <div style="font-size:19px;font-weight:900;letter-spacing:.02em;text-transform:uppercase;">Reporte de Observación</div>
+      <div style="margin-left:auto;text-align:right;"><div style="font-size:9px;color:#6B6862;text-transform:uppercase;letter-spacing:.06em;">N° tarjeta</div><div style="font-size:22px;font-weight:900;">${fmtCorr_(payload.correlativo)}</div></div>
+    </div>
+
+    <div style="margin-bottom:28px;break-inside:avoid;">
+      <div style="border-bottom:2.5px solid #1C1C1C;padding-bottom:10px;margin-bottom:12px;">
+        <p style="margin:0 0 3px;font-size:12px;font-weight:700;color:#E31C23;">• Actos seguros.</p>
+        <p style="margin:0;font-size:12px;font-weight:700;color:#E31C23;">• Acciones llevadas a cabo para fomentar un desempeño seguro continuo.</p>
+      </div>
+      <div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap;min-height:200px;">${esc_(payload.actosSegurosReporte) || '—'}</div>
+    </div>
+
+    <div style="break-inside:avoid;">
+      <div style="border-bottom:2.5px solid #1C1C1C;padding-bottom:10px;margin-bottom:12px;">
+        <p style="margin:0 0 3px;font-size:12px;font-weight:700;">• Actos inseguros observados.</p>
+        <p style="margin:0 0 3px;font-size:12px;font-weight:700;">• Acción correctiva inmediata.</p>
+        <p style="margin:0;font-size:12px;font-weight:700;">• Acción para prevenir la repetición.</p>
+      </div>
+      <div style="font-size:12.5px;line-height:1.7;white-space:pre-wrap;min-height:200px;">${esc_(payload.actosInsegurosReporte) || '—'}</div>
+    </div>
+  </div>`;
+}
+
+function esc_(str){
+  if(!str) return "";
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML.replace(/\n/g, "<br>");
+}
+
+/* Agrega un canvas al PDF, partiéndolo en tantas páginas como necesite,
+   siempre empezando en una página nueva y en blanco (nunca mezclado con otra hoja). */
+function addCanvasToPdf_(pdf, canvas, isFirstPage){
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const imgWidth = pageWidth;
+  const imgHeight = canvas.height * imgWidth / canvas.width;
+  const imgData = canvas.toDataURL("image/jpeg", 0.95);
+
+  if(!isFirstPage) pdf.addPage();
+
+  let heightLeft = imgHeight;
+  let position = 0;
+  pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+  while(heightLeft > 0){
+    position = heightLeft - imgHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+  }
+}
+
+/* Agrega un canvas ocupando SIEMPRE una sola página: si el contenido es más alto
+   que la página, lo reduce (contain) en vez de partirlo. Se usa para la hoja 1
+   (checklist), así la hoja 2 ("Reporte de Observación") siempre queda en la página 2. */
+function addCanvasFitOnePage_(pdf, canvas, isFirstPage){
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+
+  if(!isFirstPage) pdf.addPage();
+
+  let imgWidth = pageWidth;
+  let imgHeight = canvas.height * imgWidth / canvas.width;
+  if(imgHeight > pageHeight){
+    imgHeight = pageHeight;
+    imgWidth = canvas.width * imgHeight / canvas.height;
+  }
+  const x = (pageWidth - imgWidth) / 2;
+  const imgData = canvas.toDataURL("image/jpeg", 0.95);
+  pdf.addImage(imgData, "JPEG", x, 0, imgWidth, imgHeight);
+}
+
+/* ============ Generar PDF de las 2 hojas (para envío por correo) ============ */
+async function generatePdfBase64(payload){
+  const holder = document.createElement("div");
+  holder.id = "pdfHolder";
+  holder.style.position = "fixed";
+  holder.style.left = "-10000px";
+  holder.style.top = "0";
+  document.body.appendChild(holder);
+
+  holder.innerHTML = pdfPage1Html(payload);
+  await new Promise(r => setTimeout(r, 30));
+  const canvas1 = await html2canvas(holder.firstElementChild, {scale:2, backgroundColor:"#ffffff"});
+
+  holder.innerHTML = pdfPage2Html(payload);
+  await new Promise(r => setTimeout(r, 30));
+  const canvas2 = await html2canvas(holder.firstElementChild, {scale:2, backgroundColor:"#ffffff"});
+
+  document.body.removeChild(holder);
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF("p","pt","a4");
+  addCanvasFitOnePage_(pdf, canvas1, true);   // hoja 1: siempre página 1 completa
+  addCanvasToPdf_(pdf, canvas2, false);       // hoja 2: siempre arranca en página 2
+
+  return pdf.output("datauristring").split(",")[1]; // solo el base64
+}
+
+/* ============ Validación ============ */
+["mObservador","mTurno","mArea","mAreaObservado"].forEach(id=>{
+  const el = document.getElementById(id);
+  el.addEventListener(el.tagName === "SELECT" ? "change" : "input",
+    ()=> el.closest(".field").classList.remove("invalid"));
+});
+
+function clearInvalidAll_(){
+  document.querySelectorAll(".field.invalid, .section.invalid").forEach(e=> e.classList.remove("invalid"));
+}
+
+function validateCard_(){
+  clearInvalidAll_();
+  const required = [
+    ["mObservador", "el nombre del observador"],
+    ["mTurno", "el turno"],
+    ["mArea", "el área / zona observada"],
+    ["mAreaObservado", "el área del observado"]
+  ];
+  const missingFields = required.filter(([id]) => !document.getElementById(id).value.trim());
+  missingFields.forEach(([id]) => document.getElementById(id).closest(".field").classList.add("invalid"));
+  if(missingFields.length){
+    return {msg: "Falta " + missingFields[0][1], target: document.getElementById(missingFields[0][0])};
+  }
+  const missingSecs = SECTIONS.filter(sec => !sectionAnswered_(sec.id));
+  missingSecs.forEach(sec => document.querySelector(`.section[data-section="${sec.id}"]`).classList.add("invalid"));
+  if(missingSecs.length){
+    return {
+      msg: `Faltan ${missingSecs.length} sección(es): marca los actos o "todo seguro"`,
+      target: document.querySelector(`.section[data-section="${missingSecs[0].id}"]`)
+    };
+  }
+  return null;
+}
+
+/* ============ Reinicio tras guardar (conserva observador y turno) ============ */
+function resetCard_(){
+  ["mArea","mPersona","mComentarios","p2ActosSeguros","p2ActosInseguros"]
+    .forEach(id => { document.getElementById(id).value = ""; });
+  document.getElementById("mAreaObservado").value = "";
+  document.getElementById("mPasillo").selectedIndex = 0;   // vuelve a "No aplica"
+  document.querySelectorAll("[data-other]").forEach(i => { i.value = ""; });
+  SECTIONS.forEach(sec => { state.sections[sec.id] = { safe:false, items: sec.items.map(_=>false), other:"" }; });
+  document.querySelectorAll(".item").forEach(row=>{
+    row.classList.remove("checked");
+    row.querySelector(".box").classList.remove("checked");
+    row.setAttribute("aria-checked", "false");
+  });
+  document.querySelectorAll(".sec-toggle").forEach(t=>{
+    t.classList.remove("on");
+    t.querySelector(".box").classList.remove("checked");
+    t.setAttribute("aria-checked", "false");
+  });
+  clearInvalidAll_();
+  setFechaNow();
+  updateStatus();
+  correlativo = null;
+  try{ localStorage.removeItem(CORR_KEY); }catch(e){}
+  renderCorr_();
+  initCorrelativo_();                  // reserva el número de la tarjeta siguiente
+  goToPage1();
+}
+
+/* ============ Sincronización de la cola ============ */
+let syncing_ = false;
+async function syncQueue_(){
+  if(syncing_) return;
+  const pending = getQueue();
+  if(pending.length === 0) return;
+  if(!navigator.onLine){ showToast(`Sin conexión. ${pending.length} pendiente(s)`); return; }
+  syncing_ = true;
+  try{
+    const sentIds = new Set();
+    let lastErr = "", noPdf = 0;
+    for(const item of pending){
+      const r = await trySend(item);
+      if(!r.ok){ lastErr = r.error; break; }
+      sentIds.add(item.id);
+      if(r.sinPdf) noPdf++;
+    }
+    // se relee la cola: el usuario pudo guardar otra tarjeta mientras se enviaba
+    setQueue(getQueue().filter(p => !sentIds.has(p.id)));
+    const left = getQueue().length;
+    if(lastErr){
+      showToast(`${left} pendiente(s): ${lastErr}`);
+    } else {
+      const base = sentIds.size === 1 ? "Tarjeta enviada ✔" : `${sentIds.size} tarjetas enviadas ✔`;
+      showToast(base + (noPdf ? " (sin PDF adjunto)" : ""));
+    }
+  } finally {
+    syncing_ = false;
+  }
+}
+
+document.getElementById("btnGuardar").addEventListener("click", async ()=>{
+  const err = validateCard_();
+  if(err){
+    goToPage1();   // los campos a corregir están en la página 1
+    showToast(err.msg);
+    setTimeout(()=>{
+      err.target.scrollIntoView({block:"center", behavior:"smooth"});
+      if(err.target.focus && /INPUT|SELECT/.test(err.target.tagName)) err.target.focus({preventScroll:true});
+    }, 80);
+    return;
+  }
+  const btn = document.getElementById("btnGuardar");
+  btn.disabled = true; btn.textContent = "Guardando...";
+  setFechaNow();                       // la hora es la del guardado, no la de apertura
+  if(correlativo == null) await initCorrelativo_();   // último intento antes de dejarla 'pendiente'
+  const payload = buildPayload();
+  const q = getQueue(); q.push(payload);
+  const saved = setQueue(q);
+  btn.disabled = false; btn.textContent = "Guardar tarjeta";
+  if(!saved) return;                   // sin espacio: no se reinicia nada
+  resetCard_();                        // la tarjeta ya está a salvo en la cola
+  showToast("Tarjeta guardada. Enviando...");
+  await syncQueue_();
+});
+
+document.getElementById("btnSync").addEventListener("click", async ()=>{
+  if(getQueue().length === 0){ showToast("No hay tarjetas pendientes"); return; }
+  showToast("Sincronizando...");
+  await syncQueue_();
+});
+
+window.addEventListener("online", ()=>{ initCorrelativo_(); syncQueue_(); });
+if(getQueue().length > 0) setTimeout(()=> syncQueue_(), 1500);
+renderCorr_();
+initCorrelativo_();
+
+document.getElementById("btnPdf").addEventListener("click", ()=> window.print());
+
+/* ============ Navegación entre páginas ============ */
+function goToPage2(){
+  document.getElementById("page1").classList.add("hidden");
+  document.getElementById("page2").classList.add("active");
+  document.getElementById("footerPage1").style.display = "none";
+  document.getElementById("footerPage2").style.display = "flex";
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+function goToPage1(){
+  document.getElementById("page1").classList.remove("hidden");
+  document.getElementById("page2").classList.remove("active");
+  document.getElementById("footerPage1").style.display = "flex";
+  document.getElementById("footerPage2").style.display = "none";
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+document.getElementById("btnSiguiente").addEventListener("click", goToPage2);
+document.getElementById("btnAtras").addEventListener("click", goToPage1);
+</script>
+</body>
+</html>

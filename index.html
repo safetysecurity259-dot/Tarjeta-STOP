@@ -142,6 +142,7 @@
   .status-count + .status-count{border-left:1px solid #3F3F3F;padding-left:10px;}
   .status-count .lbl{white-space:nowrap;}
   @media (max-width:340px){.status-count .lbl{font-size:8px;letter-spacing:.03em;}.status-count + .status-count{padding-left:8px;}#corrN{font-size:16px;}}
+  #corrBox{cursor:pointer;}
   #corrN{font-size:18px;font-weight:800;letter-spacing:.02em;color:#fff;}
   #corrBox.pend #corrN{font-size:13px;color:var(--accent);}
 
@@ -588,20 +589,39 @@ function renderCorr_(){
   const txt = correlativo == null ? "Pend." : fmtCorr_(correlativo);
   ["corrN","corrN2"].forEach(id=>{ const el = document.getElementById(id); if(el) el.textContent = txt; });
   const box = document.getElementById("corrBox");
-  if(box) box.classList.toggle("pend", correlativo == null);
+  if(box){
+    box.classList.toggle("pend", correlativo == null);
+    box.querySelector(".lbl").textContent = correlativo == null ? "toca: reintentar" : "N° tarjeta";
+  }
 }
 
-/* Pide un número nuevo al script. Devuelve el entero o null si no hay conexión/respuesta. */
+/* Pide un número nuevo al script. Devuelve el entero, o null y deja el motivo en corrError_. */
+let corrError_ = "";
 async function fetchCorrelativo_(){
-  if(GAS_URL.includes("PEGA_AQUI") || !navigator.onLine) return null;
+  corrError_ = "";
+  if(GAS_URL.includes("PEGA_AQUI")){ corrError_ = "Falta configurar GAS_URL"; return null; }
+  if(!navigator.onLine){ corrError_ = "Sin conexión a internet"; return null; }
   const ctl = new AbortController();
-  const t = setTimeout(()=> ctl.abort(), 7000);
+  const t = setTimeout(()=> ctl.abort(), 10000);
   try{
-    const res = await fetch(GAS_URL + "?accion=siguiente", {signal: ctl.signal});
-    const d = await res.json();
-    return (d && d.ok === true && Number.isInteger(d.correlativo)) ? d.correlativo : null;
-  }catch(e){ return null; }
-  finally{ clearTimeout(t); }
+    const res = await fetch(GAS_URL + "?accion=siguiente&_=" + Date.now(), {signal: ctl.signal, cache: "no-store"});
+    let d = null;
+    try{ d = await res.json(); }
+    catch(e){
+      corrError_ = "El script no respondió JSON. Revisa que el acceso sea «Cualquier persona» y que esté autorizado";
+      return null;
+    }
+    if(d && d.ok === true && Number.isInteger(d.correlativo)) return d.correlativo;
+    corrError_ = (d && d.ok === true)
+      ? "El script está desactualizado: publica una Nueva versión"
+      : "El script respondió: " + ((d && d.error) || "error desconocido");
+    return null;
+  }catch(e){
+    corrError_ = (e && e.name === "AbortError")
+      ? "El script tardó demasiado en responder"
+      : "No se pudo conectar con el script (red o bloqueo del navegador)";
+    return null;
+  }finally{ clearTimeout(t); }
 }
 
 /* Deja un número reservado para la tarjeta en curso. Si recargas la página reutiliza el mismo. */
@@ -671,7 +691,7 @@ async function trySend(payload){
   if(GAS_URL.includes("PEGA_AQUI")) return {ok:false, error:"Falta configurar GAS_URL"};
   if(payload.correlativo == null){
     const n = await fetchCorrelativo_();
-    if(n === null) return {ok:false, error:"No se pudo obtener el N° de tarjeta"};
+    if(n === null) return {ok:false, error:"Sin N° de tarjeta: " + corrError_};
     payload.correlativo = n;
     const q = getQueue(), it = q.find(x => x.id === payload.id);   // se guarda ya: un reintento no pide otro
     if(it){ it.correlativo = n; setQueue(q); }
@@ -1008,6 +1028,14 @@ window.addEventListener("online", ()=>{ initCorrelativo_(); syncQueue_(); });
 if(getQueue().length > 0) setTimeout(()=> syncQueue_(), 1500);
 renderCorr_();
 initCorrelativo_();
+document.getElementById("corrBox").addEventListener("click", async ()=>{
+  if(correlativo != null){ showToast("Tarjeta N° " + fmtCorr_(correlativo)); return; }
+  showToast("Pidiendo N° de tarjeta...");
+  await initCorrelativo_();
+  showToast(correlativo != null ? "N° asignado: " + fmtCorr_(correlativo) : "Sin N°: " + corrError_);
+});
+setInterval(()=>{ if(correlativo == null && !document.hidden) initCorrelativo_(); }, 20000);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) initCorrelativo_(); });
 
 document.getElementById("btnPdf").addEventListener("click", ()=> window.print());
 

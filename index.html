@@ -339,7 +339,7 @@
 <script>
 /* ============ CONFIG ============ */
 // Reemplaza por la URL de tu Web App de Apps Script (Implementar > Nueva implementación > Aplicación web)
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyboZzpIilnxfx2c4CgsE0d5HXwcjwvoCf-HHdl8u3W7wW84JfwtJU1oS-OTrUEuXfWCQ/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbw0Vw9VTUb6X6jfxznuZPSdDQGrIN6feRln3iF7__EM7AQXdp-KJugL6hTTx_KWcW2OJg/exec";
 const STORAGE_KEY = "stop_cards_queue_v1";
 const FORM_CODE = "SI-006/Rev.2";
 
@@ -581,7 +581,7 @@ refreshPendingDot();
 
 /* ============ Correlativo (único y global, lo entrega Google) ============ */
 const CORR_KEY = "stop_correlativo_actual";
-let correlativo = null, corrBusy_ = false;
+let correlativo = null, corrBusy_ = false, corrFails_ = 0;   // corrFails_: fallos seguidos (tras 5 deja de reintentar sola)
 
 function fmtCorr_(n){ return (n === null || n === undefined || n === "") ? "—" : String(n).padStart(4, "0"); }
 
@@ -597,30 +597,32 @@ function renderCorr_(){
 
 /* Pide un número nuevo al script. Devuelve el entero, o null y deja el motivo en corrError_. */
 let corrError_ = "";
+// Compatibilidad: el ID de la implementación ya va dentro del mensaje (corrFail_), así que esto no agrega nada.
+function tag_(){ return ""; }
+function gasId_(){ const m = GAS_URL.match(/\/s\/([^/]+)\//); return m ? m[1].slice(0, 12) : "?"; }
+function corrFail_(msg){ corrError_ = msg + " [implementación " + gasId_() + "…]"; return null; }
 async function fetchCorrelativo_(){
   corrError_ = "";
-  if(GAS_URL.includes("PEGA_AQUI")){ corrError_ = "Falta configurar GAS_URL"; return null; }
-  if(!navigator.onLine){ corrError_ = "Sin conexión a internet"; return null; }
+  if(GAS_URL.includes("PEGA_AQUI")) return corrFail_("Falta configurar GAS_URL");
+  if(!navigator.onLine) return corrFail_("Sin conexión a internet");
   const ctl = new AbortController();
   const t = setTimeout(()=> ctl.abort(), 10000);
   try{
     const res = await fetch(GAS_URL + "?accion=siguiente&_=" + Date.now(), {signal: ctl.signal, cache: "no-store"});
+    if(res.status === 404) return corrFail_("Google no encuentra esa implementación (404): URL archivada o incorrecta");
     let d = null;
     try{ d = await res.json(); }
     catch(e){
-      corrError_ = "El script no respondió JSON. Revisa que el acceso sea «Cualquier persona» y que esté autorizado";
-      return null;
+      return corrFail_("El script no respondió JSON. Revisa que el acceso sea «Cualquier persona» y que esté autorizado");
     }
     if(d && d.ok === true && Number.isInteger(d.correlativo)) return d.correlativo;
-    corrError_ = (d && d.ok === true)
+    return corrFail_((d && d.ok === true)
       ? "El script está desactualizado: publica una Nueva versión"
-      : "El script respondió: " + ((d && d.error) || "error desconocido");
-    return null;
+      : "El script respondió: " + ((d && d.error) || "error desconocido"));
   }catch(e){
-    corrError_ = (e && e.name === "AbortError")
+    return corrFail_((e && e.name === "AbortError")
       ? "El script tardó demasiado en responder"
-      : "No se pudo conectar con el script (red o bloqueo del navegador)";
-    return null;
+      : "No se pudo conectar con el script. Si la consola dice 404, la URL es incorrecta o está archivada");
   }finally{ clearTimeout(t); }
 }
 
@@ -633,7 +635,8 @@ async function initCorrelativo_(){
     try{ const v = localStorage.getItem(CORR_KEY); if(v) n = parseInt(v, 10); }catch(e){}
     if(!Number.isInteger(n)){
       n = await fetchCorrelativo_();
-      if(n !== null){ try{ localStorage.setItem(CORR_KEY, String(n)); }catch(e){} }
+      if(n !== null){ corrFails_ = 0; try{ localStorage.setItem(CORR_KEY, String(n)); }catch(e){} }
+      else corrFails_++;
     }
     correlativo = Number.isInteger(n) ? n : null;
   } finally {
@@ -691,7 +694,7 @@ async function trySend(payload){
   if(GAS_URL.includes("PEGA_AQUI")) return {ok:false, error:"Falta configurar GAS_URL"};
   if(payload.correlativo == null){
     const n = await fetchCorrelativo_();
-    if(n === null) return {ok:false, error:"Sin N° de tarjeta: " + corrError_};
+    if(n === null) return {ok:false, error:"Sin N° de tarjeta: " + corrError_ + tag_()};
     payload.correlativo = n;
     const q = getQueue(), it = q.find(x => x.id === payload.id);   // se guarda ya: un reintento no pide otro
     if(it){ it.correlativo = n; setQueue(q); }
@@ -1024,18 +1027,19 @@ document.getElementById("btnSync").addEventListener("click", async ()=>{
   await syncQueue_();
 });
 
-window.addEventListener("online", ()=>{ initCorrelativo_(); syncQueue_(); });
+window.addEventListener("online", ()=>{ corrFails_ = 0; initCorrelativo_(); syncQueue_(); });
 if(getQueue().length > 0) setTimeout(()=> syncQueue_(), 1500);
 renderCorr_();
 initCorrelativo_();
 document.getElementById("corrBox").addEventListener("click", async ()=>{
   if(correlativo != null){ showToast("Tarjeta N° " + fmtCorr_(correlativo)); return; }
+  corrFails_ = 0;
   showToast("Pidiendo N° de tarjeta...");
   await initCorrelativo_();
-  showToast(correlativo != null ? "N° asignado: " + fmtCorr_(correlativo) : "Sin N°: " + corrError_);
+  showToast(correlativo != null ? "N° asignado: " + fmtCorr_(correlativo) : "Sin N°: " + corrError_ + tag_());
 });
-setInterval(()=>{ if(correlativo == null && !document.hidden) initCorrelativo_(); }, 20000);
-document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) initCorrelativo_(); });
+setInterval(()=>{ if(correlativo == null && !document.hidden && corrFails_ < 5) initCorrelativo_(); }, 20000);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && corrFails_ < 5) initCorrelativo_(); });
 
 document.getElementById("btnPdf").addEventListener("click", ()=> window.print());
 
